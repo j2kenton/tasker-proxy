@@ -1,0 +1,11 @@
+{
+  "name": "tasker-api-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/firestore": "^7.7.0",
+    "@google-cloud/functions-framework": "^3.0.0",
+    "@google/genai": "^1.15.0",
+    "axios": "^1.7.2"
+  }
+}
