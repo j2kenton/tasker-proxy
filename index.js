@@ -1,12 +1,14 @@
 const functions = require("@google-cloud/functions-framework");
 const axios = require("axios");
 const { Firestore } = require("@google-cloud/firestore");
-import { GoogleGenAI } from "@google/genai";
+const { GoogleGenAI } = require("@google/genai");
 
 // Initialize the Firestore database client
 const firestore = new Firestore();
 
-const ai = new GoogleGenAI({});
+// Initialize the Google GenAI client
+const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY);
+
 
 // Read the IP whitelist from the separate JSON file
 const WHITELISTED_IPS = require("./whitelist.json").ips;
@@ -201,25 +203,12 @@ async function handleOpenAI(prompt) {
 
 // Handles Google Gemini requests
 async function handleGemini(prompt) {
-  // const apiKey = process.env.GEMINI_API_KEY;
-  // const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`;
-  // const body = {
-  //   contents: [{ role: "user", parts: [{ text: prompt }] }],
-  // };
-  // const headers = {
-  //   "Content-Type": "application/json",
-  //   "X-goog-api-key": apiKey,
-  // };
-  // const response = await axios.post(url, body, { headers });
+  // Get the generative model
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
-    contents: prompt,
-  });
-
-  console.log("Gemini response:", response.data);
-
-  console.log("Gemini response candidates:", response.data.candidates);
-
-  return response.data.candidates[0].content.parts[0].text;
+  // Generate content
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const text = response.text();
+  return text;
 }
