@@ -217,5 +217,9 @@ async function handleGemini(prompt) {
     contents: prompt,
   });
 
+  console.log("Gemini response:", response.data);
+
+  console.log("Gemini response candidates:", response.data.candidates);
+
   return response.data.candidates[0].content.parts[0].text;
 }
