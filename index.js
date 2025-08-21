@@ -181,7 +181,10 @@ async function handleTTS(text) {
   const body = {
     input: { text },
     voice: { languageCode: "en-GB", name: "en-GB-Chirp3-HD-Algenib" },
-    audioConfig: { audioEncoding: "MP3" },
+    audioConfig: { 
+      audioEncoding: "MP3",
+      speakingRate: 0.9,
+     },
   };
   const response = await axios.post(url, body);
   return response.data.audioContent;
@@ -204,7 +207,7 @@ async function handleOpenAI(prompt) {
 async function handleGemini(prompt) {
   // Get the generative model
   const response = await googleGenAI.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
     contents: prompt,
   });
   return response.text;
