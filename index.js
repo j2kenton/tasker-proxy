@@ -7,8 +7,7 @@ const { GoogleGenAI } = require("@google/genai");
 const firestore = new Firestore();
 
 // Initialize the Google GenAI client
-const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY);
-
+const googleGenAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Read the IP whitelist from the separate JSON file
 const WHITELISTED_IPS = require("./whitelist.json").ips;
@@ -204,11 +203,9 @@ async function handleOpenAI(prompt) {
 // Handles Google Gemini requests
 async function handleGemini(prompt) {
   // Get the generative model
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
-
-  // Generate content
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const text = response.text();
-  return text;
+  const response = await googleGenAI.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: prompt,
+  });
+  return response.text;
 }
