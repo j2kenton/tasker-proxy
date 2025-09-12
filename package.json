@@ -1,7 +1,7 @@
 {
   "name": "tasker-api-proxy",
   "version": "1.0.0",
-  "description": "AI-Powered Notification Manager for Android",
+  "description": "AI Proxy Server for API access to LLM Models",
   "main": "index.js",
   "dependencies": {
     "@google-cloud/firestore": "^7.7.0",
