@@ -1,7 +1,8 @@
-const functions = require("@google-cloud/functions-framework");
-const axios = require("axios");
-const { Firestore } = require("@google-cloud/firestore");
-const { GoogleGenAI } = require("@google/genai");
+import * as functions from "@google-cloud/functions-framework";
+import axios, { AxiosResponse } from "axios";
+import { Firestore, DocumentReference, Transaction } from "@google-cloud/firestore";
+import { GoogleGenAI } from "@google/genai";
+import { Request, Response } from "express";
 
 // Initialize the Firestore database client
 const firestore = new Firestore();
@@ -10,13 +11,46 @@ const firestore = new Firestore();
 const googleGenAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Read the IP whitelist from the separate JSON file
-const WHITELISTED_IPS = require("./whitelist.json").ips;
+import whitelistData from "../whitelist.json";
+const WHITELISTED_IPS: string[] = whitelistData.ips;
+
+// Type definitions
+interface UserData {
+  prompt: string;
+}
+
+interface TTSRequestBody {
+  input: { text: string };
+  voice: { languageCode: string; name: string };
+  audioConfig: { audioEncoding: string; speakingRate: number };
+}
+
+interface TTSResponse {
+  audioContent: string;
+}
+
+interface OpenAIRequestBody {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+}
+
+interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+}
+
+interface UsageDocument {
+  count: number;
+}
 
 // --- Main Function: The Router ---
 // This is the "Entry Point" for your Cloud Function.
-functions.http("apiProxy", async (req, res) => {
-  const path = req.path;
-  const userData = req.body;
+functions.http("apiProxy", async (req: Request, res: Response): Promise<void> => {
+  const path: string = req.path;
+  const userData: UserData = req.body;
 
   // Enhanced IP detection for Google Cloud Functions
   console.log("=== IP DETECTION DEBUG ===");
@@ -28,8 +62,8 @@ functions.http("apiProxy", async (req, res) => {
   console.log("All headers:", req.headers);
 
   // Get the real IP address, handling proxies
-  let ipAddress = req.ip;
-  const forwardedFor = req.get("X-Forwarded-For");
+  let ipAddress: string | undefined = req.ip;
+  const forwardedFor: string | undefined = req.get("X-Forwarded-For");
   if (forwardedFor) {
     // X-Forwarded-For can contain multiple IPs, take the first one
     ipAddress = forwardedFor.split(",")[0].trim();
@@ -40,21 +74,22 @@ functions.http("apiProxy", async (req, res) => {
 
   // --- Throttling Logic ---
   // This checks the IP against the whitelist first, then checks the database.
-  const isAllowed = await checkAndRecordUsage(ipAddress);
+  const isAllowed: boolean = await checkAndRecordUsage(ipAddress || "");
   if (!isAllowed) {
-    return res.status(429).send({ error: "Rate limit exceeded." });
+    res.status(429).send({ error: "Rate limit exceeded." });
+    return;
   }
 
   // --- Route to the correct API handler based on the URL path ---
   try {
     if (path.includes("/tts")) {
-      const base64Audio = await handleTTS(userData.prompt);
+      const base64Audio: string = await handleTTS(userData.prompt);
       res.set("Content-Type", "text/plain").status(200).send(base64Audio);
     } else if (path.includes("/openai")) {
-      const textResponse = await handleOpenAI(userData.prompt);
+      const textResponse: string = await handleOpenAI(userData.prompt);
       res.status(200).send({ reply: textResponse });
     } else if (path.includes("/gemini")) {
-      const textResponse = await handleGemini(userData.prompt);
+      const textResponse: string = await handleGemini(userData.prompt);
       res.status(200).send({ reply: textResponse });
     } else {
       res.status(404).send({ error: "Endpoint not found." });
@@ -66,7 +101,7 @@ functions.http("apiProxy", async (req, res) => {
 });
 
 // --- Throttling Function with Whitelist and Database Logic ---
-async function checkAndRecordUsage(ipAddress) {
+async function checkAndRecordUsage(ipAddress: string): Promise<boolean> {
   console.log("=== RATE LIMIT DEBUG START ===");
   console.log("Raw IP Address:", ipAddress);
   console.log("IP Address type:", typeof ipAddress);
@@ -74,7 +109,7 @@ async function checkAndRecordUsage(ipAddress) {
   console.log("Whitelist type:", typeof WHITELISTED_IPS);
 
   // TEMPORARY DEBUG BYPASS - Remove this after debugging
-  const BYPASS_RATE_LIMITING = process.env.BYPASS_RATE_LIMITING === "true";
+  const BYPASS_RATE_LIMITING: boolean = process.env.BYPASS_RATE_LIMITING === "true";
   if (BYPASS_RATE_LIMITING) {
     console.log("⚠️  RATE LIMITING BYPASSED FOR DEBUGGING ⚠️");
     console.log("=== RATE LIMIT DEBUG END: ALLOWED (BYPASS) ===");
@@ -83,7 +118,7 @@ async function checkAndRecordUsage(ipAddress) {
 
   // Step 1: Whitelist Check
   // If the incoming IP is in our whitelist, approve the request immediately.
-  const isWhitelisted = WHITELISTED_IPS.includes(ipAddress);
+  const isWhitelisted: boolean = WHITELISTED_IPS.includes(ipAddress);
   console.log("Is IP whitelisted?", isWhitelisted);
 
   if (isWhitelisted) {
@@ -93,19 +128,19 @@ async function checkAndRecordUsage(ipAddress) {
   }
 
   // Step 2: Proceed with database rate-limiting for all other users
-  const IP_LIMIT = 100;
-  const GLOBAL_LIMIT = 1000;
-  const today = new Date().toISOString().split("T")[0]; // Gets date as YYYY-MM-DD
+  const IP_LIMIT: number = 100;
+  const GLOBAL_LIMIT: number = 1000;
+  const today: string = new Date().toISOString().split("T")[0]; // Gets date as YYYY-MM-DD
 
   console.log("Today's date:", today);
   console.log("IP Limit:", IP_LIMIT);
   console.log("Global Limit:", GLOBAL_LIMIT);
 
   // Define references to the documents in our database
-  const ipDocRef = firestore
+  const ipDocRef: DocumentReference = firestore
     .collection("ip-usage")
     .doc(`${ipAddress}_${today}`);
-  const globalDocRef = firestore.collection("global-usage").doc(today);
+  const globalDocRef: DocumentReference = firestore.collection("global-usage").doc(today);
 
   console.log("IP Document ID:", `${ipAddress}_${today}`);
   console.log("Global Document ID:", today);
@@ -114,7 +149,7 @@ async function checkAndRecordUsage(ipAddress) {
   try {
     console.log("Starting Firestore transaction...");
 
-    const result = await firestore.runTransaction(async (transaction) => {
+    const result: boolean = await firestore.runTransaction(async (transaction: Transaction): Promise<boolean> => {
       console.log("Inside transaction - fetching documents...");
 
       const ipDoc = await transaction.get(ipDocRef);
@@ -123,8 +158,8 @@ async function checkAndRecordUsage(ipAddress) {
       console.log("IP document exists:", ipDoc.exists);
       console.log("Global document exists:", globalDoc.exists);
 
-      const ipCount = ipDoc.exists ? ipDoc.data().count : 0;
-      const globalCount = globalDoc.exists ? globalDoc.data().count : 0;
+      const ipCount: number = ipDoc.exists ? (ipDoc.data() as UsageDocument).count : 0;
+      const globalCount: number = globalDoc.exists ? (globalDoc.data() as UsageDocument).count : 0;
 
       console.log("Current IP count:", ipCount);
       console.log("Current global count:", globalCount);
@@ -163,9 +198,9 @@ async function checkAndRecordUsage(ipAddress) {
     return result;
   } catch (e) {
     console.error("=== TRANSACTION FAILURE ===");
-    console.error("Error type:", e.constructor.name);
-    console.error("Error message:", e.message);
-    console.error("Error stack:", e.stack);
+    console.error("Error type:", (e as Error).constructor.name);
+    console.error("Error message:", (e as Error).message);
+    console.error("Error stack:", (e as Error).stack);
     console.error("Full error object:", e);
     console.log("=== RATE LIMIT DEBUG END: DENIED (ERROR) ===");
     return false; // Block request if the database transaction fails for any reason
@@ -175,40 +210,40 @@ async function checkAndRecordUsage(ipAddress) {
 // --- API Handler Functions ---
 
 // Handles Google Text-to-Speech requests
-async function handleTTS(text) {
-  const apiKey = process.env.GOOGLE_TTS_API_KEY;
-  const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
-  const body = {
+async function handleTTS(text: string): Promise<string> {
+  const apiKey: string | undefined = process.env.GOOGLE_TTS_API_KEY;
+  const url: string = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+  const body: TTSRequestBody = {
     input: { text },
     voice: { languageCode: "en-GB", name: "en-GB-Chirp3-HD-Algenib" },
-    audioConfig: { 
+    audioConfig: {
       audioEncoding: "MP3",
       speakingRate: 0.9,
      },
   };
-  const response = await axios.post(url, body);
+  const response: AxiosResponse<TTSResponse> = await axios.post(url, body);
   return response.data.audioContent;
 }
 
 // Handles OpenAI requests
-async function handleOpenAI(prompt) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const url = "https://api.openai.com/v1/chat/completions";
-  const body = {
+async function handleOpenAI(prompt: string): Promise<string> {
+  const apiKey: string | undefined = process.env.OPENAI_API_KEY;
+  const url: string = "https://api.openai.com/v1/chat/completions";
+  const body: OpenAIRequestBody = {
     model: "gpt-4o",
     messages: [{ role: "user", content: prompt }],
   };
   const headers = { Authorization: `Bearer ${apiKey}` };
-  const response = await axios.post(url, body, { headers: headers });
+  const response: AxiosResponse<OpenAIResponse> = await axios.post(url, body, { headers: headers });
   return response.data.choices[0].message.content;
 }
 
 // Handles Google Gemini requests
-async function handleGemini(prompt) {
+async function handleGemini(prompt: string): Promise<string> {
   // Get the generative model
   const response = await googleGenAI.models.generateContent({
     model: "gemini-2.5-flash-lite",
     contents: prompt,
   });
-  return response.text;
+  return response.text || "";
 }
