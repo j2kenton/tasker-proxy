@@ -2,11 +2,20 @@
   "name": "tasker-api-proxy",
   "version": "1.0.0",
   "description": "AI Proxy Server for API access to LLM Models",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
   "dependencies": {
     "@google-cloud/firestore": "^7.7.0",
     "@google-cloud/functions-framework": "^3.0.0",
     "@google/genai": "^1.15.0",
     "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }
